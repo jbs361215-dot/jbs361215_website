@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>전북 실시간 대기질 모니터링</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; text-align: center; background-color: #f4f7f6; }
+        .card { background: white; border-radius: 15px; padding: 20px; width: 300px; margin: 50px auto; shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .status-1 { color: blue; } .status-2 { color: green; } .status-3 { color: orange; } .status-4 { color: red; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>{{ air.stationName }} 대기질</h1>
+        <p>미세먼지(PM10): <strong>{{ air.pm10Value }}</strong> µg/m³</p>
+        <p>초미세먼지(PM2.5): <strong>{{ air.pm25Value }}</strong> µg/m³</p>
+        <h2 class="status-{{ air.khaiGrade }}">통합대기환경지수: {{ air.khaiGrade }}등급</h2>
+        <p>※ 1:좋음, 2:보통, 3:나쁨, 4:매우나쁨</p>
+    </div>
+</body>
+</html>
