@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>전북 익산 미세먼지 대시보드</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 30px 16px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      padding: 32px;
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 { text-align: center; font-size: 1.5rem; color: #0369a1; margin-bottom: 4px; }
+    .subtitle { text-align: center; color: #64748b; font-size: 0.85rem; margin-bottom: 24px; }
+    .btn {
+      display: block; width: 100%; padding: 13px;
+      background: #0284c7; color: white; border: none;
+      border-radius: 12px; font-size: 1rem; cursor: pointer;
+      margin-bottom: 24px; transition: background 0.2s;
+    }
+    .btn:hover { background: #0369a1; }
+    .btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    #timestamp { text-align: center; font-size: 0.8rem; color: #94a3b8; margin-bottom: 20px; }
+    .grade-banner {
+      border-radius: 14px; padding: 16px; text-align: center;
+      font-size: 1.1rem; font-weight: bold; margin-bottom: 22px;
+    }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+    .card {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 14px; padding: 16px; text-align: center;
+    }
+    .card .label { font-size: 0.78rem; color: #64748b; margin-bottom: 6px; }
+    .card .value { font-size: 1.6rem; font-weight: bold; color: #1e293b; }
+    .card .unit  { font-size: 0.72rem; color: #94a3b8; }
+    .card .grade-tag {
+      display: inline-block; margin-top: 6px; padding: 2px 10px;
+      border-radius: 20px; font-size: 0.75rem; font-weight: bold;
+    }
+    .extra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .extra-card { background: #f1f5f9; border-radius: 12px; padding: 12px; text-align: center; }
+    .extra-card .label { font-size: 0.72rem; color: #64748b; margin-bottom: 4px; }
+    .extra-card .value { font-size: 1.2rem; font-weight: bold; color: #334155; }
+    .extra-card .unit  { font-size: 0.68rem; color: #94a3b8; }
+    #error-box {
+      display: none; background: #fef2f2; border: 1px solid #fca5a5;
+      border-radius: 12px; padding: 14px; color: #dc2626;
+      font-size: 0.88rem; text-align: center; line-height: 1.6;
+    }
+    .good    { background:#dcfce7; color:#16a34a; }
+    .normal  { background:#fefce8; color:#ca8a04; }
+    .bad     { background:#ffedd5; color:#ea580c; }
+    .verybad { background:#fee2e2; color:#dc2626; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📍 전북 익산 미세먼지</h1>
+  <p class="subtitle">한국환경공단 에어코리아 실시간 측정</p>
+
+  <button class="btn" id="fetchBtn" onclick="fetchDust()">🔄 실시간 데이터 불러오기</button>
+  <div id="timestamp"></div>
+  <div id="error-box"></div>
+
+  <div id="result" style="display:none;">
+    <div class="grade-banner" id="khai-banner"></div>
+    <div class="cards">
+      <div class="card">
+        <div class="label">미세먼지 (PM10)</div>
+        <div class="value" id="pm10">-</div>
+        <div class="unit">㎍/㎥</div>
+        <div class="grade-tag" id="pm10-grade"></div>
+      </div>
+      <div class="card">
+        <div class="label">초미세먼지 (PM2.5)</div>
+        <div class="value" id="pm25">-</div>
+        <div class="unit">㎍/㎥</div>
+        <div class="grade-tag" id="pm25-grade"></div>
+      </div>
+    </div>
+    <div class="extra-grid">
+      <div class="extra-card">
+        <div class="label">오존 (O₃)</div>
+        <div class="value" id="o3">-</div>
+        <div class="unit">ppm</div>
+      </div>
+      <div class="extra-card">
+        <div class="label">이산화질소 (NO₂)</div>
+        <div class="value" id="no2">-</div>
+        <div class="unit">ppm</div>
+      </div>
+      <div class="extra-card">
+        <div class="label">일산화탄소 (CO)</div>
+        <div class="value" id="co">-</div>
+        <div class="unit">ppm</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_KEY = "12d58f38afab181ee27e3d1f1cb83b44e01fdede2b000778d197488640d1c6a9";
+
+  const gradeInfo = {
+    "1": { label: "좋음 😊",     css: "good"    },
+    "2": { label: "보통 🙂",     css: "normal"  },
+    "3": { label: "나쁨 😷",     css: "bad"     },
+    "4": { label: "매우나쁨 ☠️", css: "verybad" }
+  };
+
+  function setGradeTag(elId, grade) {
+    const el = document.getElementById(elId);
+    const info = gradeInfo[String(grade)] || { label: "정보없음", css: "" };
+    el.textContent = info.label;
+    el.className = "grade-tag " + info.css;
+  }
+
+  function renderData(item) {
+    document.getElementById("pm10").textContent = item.pm10Value  ?? "-";
+    document.getElementById("pm25").textContent = item.pm25Value  ?? "-";
+    document.getElementById("o3").textContent   = item.o3Value    ?? "-";
+    document.getElementById("no2").textContent  = item.no2Value   ?? "-";
+    document.getElementById("co").textContent   = item.coValue    ?? "-";
+
+    setGradeTag("pm10-grade", item.pm10Grade1h);
+    setGradeTag("pm25-grade", item.pm25Grade1h);
+
+    const khaiLabel = {
+      "1": { text: "통합대기 좋음 😊",     css: "good"    },
+      "2": { text: "통합대기 보통 🙂",     css: "normal"  },
+      "3": { text: "통합대기 나쁨 😷",     css: "bad"     },
+      "4": { text: "통합대기 매우나쁨 ☠️", css: "verybad" }
+    };
+    const khai = khaiLabel[String(item.khaiGrade)] || { text: "통합대기 정보없음", css: "" };
+    const banner = document.getElementById("khai-banner");
+    banner.textContent = `${khai.text}  (지수: ${item.khaiValue ?? "-"})`;
+    banner.className = "grade-banner " + khai.css;
+
+    const now = new Date();
+    document.getElementById("timestamp").textContent =
+      `측정시각: ${item.dataTime}  |  조회: ${now.toLocaleTimeString("ko-KR")}`;
+
+    document.getElementById("result").style.display = "block";
+  }
+
+  async function tryFetch(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text);
+      return json?.response?.body?.items?.[0] ?? null;
+    } catch {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(text, "text/xml");
+      const items = xml.getElementsByTagName("item");
+      if (!items.length) return null;
+      const item = {};
+      for (const child of items[0].children) {
+        item[child.tagName] = child.textContent;
+      }
+      return item;
+    }
+  }
+
+  async function fetchDust() {
+    const btn = document.getElementById("fetchBtn");
+    const errBox = document.getElementById("error-box");
+    btn.disabled = true;
+    btn.textContent = "⏳ 불러오는 중...";
+    errBox.style.display = "none";
+    document.getElementById("result").style.display = "none";
+
+    const params = new URLSearchParams({
+      serviceKey: API_KEY,
+      returnType: "json",
+      numOfRows: "1",
+      pageNo: "1",
+      stationName: "익산",
+      dataTerm: "DAILY",
+      ver: "1.0"
+    });
+
+    const directUrl = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?${params}`;
+
+    const proxies = [
+      `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+      `https://thingproxy.freeboard.io/fetch/${directUrl}`
+    ];
+
+    let item = null;
+    let lastError = "";
+
+    // 직접 호출 먼저 시도
+    try { item = await tryFetch(directUrl); } catch (e) { lastError = e.message; }
+
+    // 실패 시 프록시 순서대로
+    if (!item) {
+      for (const proxyUrl of proxies) {
+        try {
+          item = await tryFetch(proxyUrl);
+          if (item) break;
+        } catch (e) { lastError = e.message; }
+      }
+    }
+
+    btn.disabled = false;
+    btn.textContent = "🔄 실시간 데이터 불러오기";
+
+    if (item) {
+      renderData(item);
+    } else {
+      errBox.innerHTML =
+        `⚠️ 데이터를 불러오지 못했습니다. (${lastError})<br><br>` +
+        `<b>해결 방법</b><br>` +
+        `① 인터넷 연결 확인 후 다시 시도<br>` +
+        `② GitHub Pages에 올린 뒤 접속하면 정상 작동할 수 있어요<br>` +
+        `③ <a href="https://www.airkorea.or.kr" target="_blank" style="color:#dc2626">에어코리아</a>에서 직접 확인`;
+      errBox.style.display = "block";
+    }
+  }
+
+  window.onload = fetchDust;
+</script>
+</body>
+</html>
